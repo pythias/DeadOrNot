@@ -1,0 +1,13 @@
+---
+name: swift
+description: This is a new rule
+---
+
+# Overview
+
+- Prefer SwiftUI + MVVM (or clearly state if using UIKit).
+- Keep changes small and compilable. No placeholder code.
+- When editing, show file paths and full code blocks for modified files.
+- For new features: include model, viewmodel, view, and minimal wiring.
+- Always consider iOS concurrency: use async/await, MainActor for UI updates.
+- Add simple error handling and a quick manual test checklist.
