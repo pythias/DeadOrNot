@@ -158,7 +158,8 @@ def create_tinted_icon(size):
 
 def main():
     """生成所有图标"""
-    output_dir = "../DeadOrNot/Assets.xcassets/AppIcon.appiconset"
+    __dir__ = os.path.dirname(os.path.abspath(__file__))
+    output_dir = os.path.join(__dir__, "../DeadOrNot/Assets.xcassets/AppIcon.appiconset")
     os.makedirs(output_dir, exist_ok=True)
     
     # 生成标准图标（1024x1024）
