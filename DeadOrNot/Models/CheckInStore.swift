@@ -8,14 +8,30 @@ final class CheckInStore: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private let notificationManager = NotificationManager.shared
     private let missedNotificationIdentifier = "DeadOrNot_Missed3Days"
+    private var isLoading = false
 
     init() {
+        // 先加载数据，避免触发保存
+        isLoading = true
+        if let arr = UserDefaults.standard.array(forKey: userDefaultsKey) as? [String] {
+            dates = Set(arr)
+        }
+        isLoading = false
+        
+        // 设置监听，监听后续的变化
         $dates
-            .sink { [weak self] _ in self?.saveToStorage() }
+            .dropFirst() // 跳过初始值
+            .sink { [weak self] dates in
+                guard let self = self, !self.isLoading else { return }
+                self.saveToStorage()
+            }
             .store(in: &cancellables)
     }
 
     func reloadFromStorage() {
+        isLoading = true
+        defer { isLoading = false }
+        
         if let arr = UserDefaults.standard.array(forKey: userDefaultsKey) as? [String] {
             dates = Set(arr)
         }
@@ -23,6 +39,8 @@ final class CheckInStore: ObservableObject {
 
     private func saveToStorage() {
         UserDefaults.standard.set(Array(dates), forKey: userDefaultsKey)
+        // 确保立即同步到磁盘
+        UserDefaults.standard.synchronize()
     }
 
     private func dateFormatter() -> DateFormatter {
@@ -48,6 +66,8 @@ final class CheckInStore: ObservableObject {
     func checkInToday() {
         let key = todayString
         dates.insert(key)
+        // 确保立即保存
+        saveToStorage()
         // 每次打卡后取消旧提醒并重新安排
         cancelMissedReminder()
         scheduleMissedReminderIfNeeded()
