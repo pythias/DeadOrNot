@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 
+@MainActor
 final class UserInfo: ObservableObject {
     @Published var name: String = "" {
         didSet {
@@ -25,9 +26,13 @@ final class UserInfo: ObservableObject {
     private var isLoading = false
     private let userDefaultsKeyName = "DeadOrNot.userName"
     private let userDefaultsKeyEmails = "DeadOrNot.emergencyContactEmails"
+    private let apiService = APIService.shared
     
     init() {
         loadFromStorage()
+        Task {
+            await loadFromServer()
+        }
     }
     
     private func loadFromStorage() {
@@ -45,6 +50,40 @@ final class UserInfo: ObservableObject {
         UserDefaults.standard.set(emergencyContactEmails, forKey: userDefaultsKeyEmails)
         // 确保立即同步到磁盘
         UserDefaults.standard.synchronize()
+    }
+    
+    func saveToServer() async {
+        let timezone = TimeZone.current.identifier
+        do {
+            try await apiService.updateUser(
+                name: name.isEmpty ? nil : name,
+                emails: emergencyContactEmails.isEmpty ? nil : emergencyContactEmails,
+                timezone: timezone
+            )
+        } catch {
+            print("Failed to save user info to server: \(error.localizedDescription)")
+        }
+    }
+    
+    private func loadFromServer() async {
+        do {
+            let user = try await apiService.getUser()
+            isLoading = true
+            
+            // 如果服务器有数据，优先使用服务器数据
+            if !user.name.isEmpty {
+                name = user.name
+            }
+            if !user.emergencyContactEmails.isEmpty {
+                emergencyContactEmails = user.emergencyContactEmails
+            }
+            
+            saveToStorage()
+            isLoading = false
+        } catch {
+            // 网络错误时保持使用本地数据
+            print("Failed to load user info from server: \(error.localizedDescription)")
+        }
     }
     
     func isSetupComplete() -> Bool {

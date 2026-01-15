@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 
+@MainActor
 final class CheckInStore: ObservableObject {
     @Published private(set) var dates: Set<String> = [] // yyyy-MM-dd
     private let userDefaultsKey = "DeadOrNot.checkinDates"
@@ -8,6 +9,7 @@ final class CheckInStore: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private let notificationManager = NotificationManager.shared
     private let missedNotificationIdentifier = "DeadOrNot_Missed3Days"
+    private let apiService = APIService.shared
     private var isLoading = false
 
     init() {
@@ -32,8 +34,27 @@ final class CheckInStore: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         
+        // 先加载本地缓存
         if let arr = UserDefaults.standard.array(forKey: userDefaultsKey) as? [String] {
             dates = Set(arr)
+        }
+        
+        // 然后同步服务器数据
+        Task {
+            await syncFromServer()
+        }
+    }
+    
+    private func syncFromServer() async {
+        do {
+            let serverDates = try await apiService.getCheckInHistory()
+            isLoading = true
+            dates = Set(serverDates)
+            saveToStorage()
+            isLoading = false
+        } catch {
+            // 网络错误时保持使用本地数据
+            print("Failed to sync from server: \(error.localizedDescription)")
         }
     }
 
@@ -65,9 +86,23 @@ final class CheckInStore: ObservableObject {
 
     func checkInToday() {
         let key = todayString
+        
+        // 先更新本地状态（乐观更新）
         dates.insert(key)
-        // 确保立即保存
         saveToStorage()
+        
+        // 然后同步到服务器
+        Task {
+            do {
+                _ = try await apiService.checkIn(date: key)
+                // 服务器同步成功，本地数据已是最新
+            } catch {
+                // 如果服务器同步失败，保持本地数据
+                // 下次reloadFromStorage时会尝试重新同步
+                print("Failed to sync check-in to server: \(error.localizedDescription)")
+            }
+        }
+        
         // 每次打卡后取消旧提醒并重新安排
         cancelMissedReminder()
         scheduleMissedReminderIfNeeded()

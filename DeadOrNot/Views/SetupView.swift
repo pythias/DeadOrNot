@@ -162,7 +162,12 @@ struct SetupView: View {
                             // 保存所有非空邮箱
                             let validEmails = workingEmails.filter { !$0.isEmpty }
                             userInfo.emergencyContactEmails = validEmails
-                            dismiss()
+                            
+                            // 提交到服务器，完成后关闭
+                            Task {
+                                await userInfo.saveToServer()
+                                dismiss()
+                            }
                         }) {
                             Text("完成设置")
                                 .font(.system(size: 20, weight: .medium))
