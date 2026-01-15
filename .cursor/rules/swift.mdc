@@ -1,13 +1,98 @@
 ---
 name: swift
-description: This is a new rule
+description: Swift & SwiftUI development rules aligned with Apple Human Interface Guidelines
 ---
 
-# Overview
+# Architecture & Code Quality
 
-- Prefer SwiftUI + MVVM (or clearly state if using UIKit).
+- **Prefer SwiftUI + MVVM** (or clearly state if using UIKit).
 - Keep changes small and compilable. No placeholder code.
 - When editing, show file paths and full code blocks for modified files.
 - For new features: include model, viewmodel, view, and minimal wiring.
 - Always consider iOS concurrency: use async/await, MainActor for UI updates.
 - Add simple error handling and a quick manual test checklist.
+
+# Apple Human Interface Guidelines (HIG) Principles
+
+## Core Design Principles
+
+1. **User Control**
+   - Empower users to initiate and control actions.
+   - Provide clear action buttons and avoid making decisions on behalf of users.
+   - Use confirmation dialogs for destructive actions.
+
+2. **Clarity**
+   - Use legible typography with appropriate font sizes (prefer system fonts).
+   - Ensure sufficient color contrast for readability.
+   - Use clear, concise labels and messaging.
+   - Maintain visual hierarchy with proper spacing and sizing.
+
+3. **Consistency**
+   - Use consistent design patterns throughout the app.
+   - Follow iOS system conventions (navigation, buttons, gestures).
+   - Maintain uniform spacing, colors, and typography.
+   - Use SF Symbols for icons when possible.
+
+4. **Feedback**
+   - Provide immediate visual feedback for user actions.
+   - Use animations to show state changes (withAnimation, transitions).
+   - Consider haptic feedback for important interactions.
+   - Show loading states and progress indicators.
+
+5. **Efficiency**
+   - Minimize steps required to complete tasks.
+   - Present information concisely and prioritize important content.
+   - Use progressive disclosure for complex features.
+   - Optimize for common use cases.
+
+6. **Accessibility**
+   - Support VoiceOver with proper accessibility labels and hints.
+   - Support Dynamic Type (use system fonts, avoid fixed sizes).
+   - Ensure sufficient color contrast (WCAG AA minimum).
+   - Support high-contrast modes and reduce motion preferences.
+   - Test with accessibility features enabled.
+
+# SwiftUI Best Practices
+
+## Layout & Adaptability
+
+- **Use adaptive layouts**: Prefer VStack, HStack, ZStack over fixed frames.
+- **Avoid hard-coded dimensions**: Use relative spacing and padding.
+- **Support all screen sizes**: Test on iPhone SE to iPhone Pro Max.
+- **Handle orientation changes**: Ensure layouts adapt to portrait/landscape.
+- **Respect safe areas**: Use `.ignoresSafeArea()` only when necessary.
+
+## Colors & Appearance
+
+- **Use semantic colors**: Prefer `.primary`, `.secondary`, `.background`, `.foreground` over hard-coded colors.
+- **Support Dark Mode**: Always test in both light and dark appearances.
+- **Use Color assets**: Define custom colors in Assets.xcassets for theme support.
+- **Ensure contrast**: Test color combinations for readability in both modes.
+
+## Typography
+
+- **Use system fonts**: Prefer `.system()` or `.body`, `.headline`, `.caption` text styles.
+- **Support Dynamic Type**: Use relative font sizes that scale with user preferences.
+- **Maintain hierarchy**: Use limited font weights and sizes consistently.
+- **Test text scaling**: Verify layouts work with largest accessibility text sizes.
+
+## System Integration
+
+- **Respect system settings**: Support Dark Mode, Reduce Motion, and other preferences.
+- **Use native components**: Prefer SwiftUI components over custom implementations.
+- **Follow platform conventions**: Use standard navigation patterns, sheet presentations, etc.
+- **Handle system events**: Properly respond to app lifecycle events.
+
+## Performance
+
+- **Optimize rendering**: Use `@State`, `@Binding`, `@ObservedObject` appropriately.
+- **Lazy loading**: Use `LazyVStack`/`LazyHStack` for long lists.
+- **Avoid unnecessary redraws**: Structure views to minimize recomputation.
+- **Profile performance**: Use Instruments to identify bottlenecks.
+
+## Error Handling & User Experience
+
+- **Provide clear error messages**: Use user-friendly language, not technical jargon.
+- **Handle edge cases**: Consider empty states, loading states, and error states.
+- **Validate input**: Provide immediate feedback for form validation.
+- **Show progress**: Indicate long-running operations with progress indicators.

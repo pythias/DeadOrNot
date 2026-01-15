@@ -3,18 +3,33 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var store: CheckInStore
     @EnvironmentObject var userInfo: UserInfo
-    @Environment(\.colorScheme) var colorScheme
     @State private var showSetup = false
     @State private var showSuccessAnimation = false
     @State private var showTermsOfService = false
     @State private var showPrivacyPolicy = false
+    
+    private var primaryGreen: Color {
+        Color(red: 0.2, green: 0.7, blue: 0.3)
+    }
 
     var body: some View {
-        ZStack {
+        NavigationStack {
             mainView
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button(action: {
+                            showSetup = true
+                        }) {
+                            Image(systemName: "gearshape.fill")
+                        }
+                    }
+                }
         }
         .sheet(isPresented: $showSetup) {
-            SetupView(userInfo: userInfo, isSetupComplete: $showSetup)
+            NavigationStack {
+                SetupView(userInfo: userInfo, isSetupComplete: $showSetup)
+            }
         }
         .sheet(isPresented: $showTermsOfService) {
             TermsOfServiceView()
@@ -24,60 +39,29 @@ struct ContentView: View {
         }
     }
     
-    private var backgroundColor: Color {
-        colorScheme == .dark 
-            ? Color(red: 0.1, green: 0.15, blue: 0.1)
-            : Color(red: 0.9, green: 0.95, blue: 0.9)
-    }
-    
-    private var primaryGreen: Color {
-        Color(red: 0.2, green: 0.7, blue: 0.3)
-    }
-    
     private var mainView: some View {
-        ZStack {
-            // 背景色，根据深色模式适配
-            backgroundColor
-                .ignoresSafeArea()
-            
-            VStack(spacing: 0) {
-                // 顶部设置按钮
-                HStack {
-                    Spacer()
-                    Button(action: {
-                        showSetup = true
-                    }) {
-                        Image(systemName: "gearshape.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(primaryGreen)
-                    }
-                    .padding(.trailing, 24)
-                    .padding(.top, 60)
-                    .padding(.bottom, 20)
-                }
-                
-                ScrollView {
-                    VStack(spacing: 24) {
-                        // 大绿色圆形按钮或已签到状态
+        ScrollView {
+            VStack(spacing: 24) {
+                        // 大圆形按钮或已签到状态
                         if store.isCheckedInToday() {
                             // 已签到状态
                             ZStack {
-                                // 外圈光晕效果（灰色）
+                                // 外圈光晕效果
                                 Circle()
-                                    .fill(Color(red: 0.7, green: 0.7, blue: 0.7).opacity(0.15))
+                                    .fill(Color.secondary.opacity(0.15))
                                     .frame(width: 300, height: 300)
                                 
                                 Circle()
-                                    .fill(Color(red: 0.7, green: 0.7, blue: 0.7).opacity(0.25))
+                                    .fill(Color.secondary.opacity(0.25))
                                     .frame(width: 260, height: 260)
                                 
                                 Circle()
-                                    .fill(Color(red: 0.7, green: 0.7, blue: 0.7).opacity(0.35))
+                                    .fill(Color.secondary.opacity(0.35))
                                     .frame(width: 220, height: 220)
                                 
-                                // 主按钮（灰色）
+                                // 主按钮
                                 Circle()
-                                    .fill(Color(red: 0.7, green: 0.7, blue: 0.7))
+                                    .fill(Color.secondary)
                                     .frame(width: 180, height: 180)
                                 
                                 VStack(spacing: 12) {
@@ -89,16 +73,16 @@ struct ContentView: View {
                                         
                                         Image(systemName: "checkmark")
                                             .font(.system(size: 30, weight: .bold))
-                                            .foregroundColor(Color(red: 0.7, green: 0.7, blue: 0.7))
+                                            .foregroundColor(Color.secondary)
                                     }
                                     
                                     Text("今日已签到")
-                                        .font(.system(size: 20, weight: .medium))
+                                        .font(.headline)
                                         .foregroundColor(.white)
                                 }
                             }
-                            .padding(.top, 30)
-                            .padding(.bottom, 20)
+                            .padding(.top, 24)
+                            .padding(.bottom, 16)
                         } else {
                             // 签到按钮
                             Button(action: {
@@ -116,20 +100,20 @@ struct ContentView: View {
                                 ZStack {
                                     // 外圈光晕效果（多层同心圆，透明度递减）
                                     Circle()
-                                        .fill(Color(red: 0.2, green: 0.7, blue: 0.3).opacity(0.15))
+                                        .fill(primaryGreen.opacity(0.15))
                                         .frame(width: 300, height: 300)
                                     
                                     Circle()
-                                        .fill(Color(red: 0.2, green: 0.7, blue: 0.3).opacity(0.25))
+                                        .fill(primaryGreen.opacity(0.25))
                                         .frame(width: 260, height: 260)
                                     
                                     Circle()
-                                        .fill(Color(red: 0.2, green: 0.7, blue: 0.3).opacity(0.35))
+                                        .fill(primaryGreen.opacity(0.35))
                                         .frame(width: 220, height: 220)
                                     
                                     // 主按钮
                                     Circle()
-                                        .fill(Color(red: 0.2, green: 0.7, blue: 0.3))
+                                        .fill(primaryGreen)
                                         .frame(width: 180, height: 180)
                                     
                                     VStack(spacing: 12) {
@@ -142,7 +126,7 @@ struct ContentView: View {
                                                 
                                                 Image(systemName: "checkmark")
                                                     .font(.system(size: 30, weight: .bold))
-                                                    .foregroundColor(Color(red: 0.2, green: 0.7, blue: 0.3))
+                                                    .foregroundColor(primaryGreen)
                                             }
                                         } else {
                                             // 幽灵图标（白色轮廓，两个眼睛和一个嘴巴）
@@ -206,66 +190,78 @@ struct ContentView: View {
                                         }
                                         
                                         Text(showSuccessAnimation ? "签到成功" : "今日签到")
-                                            .font(.system(size: 20, weight: .medium))
+                                            .font(.headline)
                                             .foregroundColor(.white)
                                     }
                                 }
                             }
-                            .padding(.top, 30)
-                            .padding(.bottom, 20)
+                            .buttonStyle(.plain)
+                            .padding(.top, 24)
+                            .padding(.bottom, 16)
                         }
                         
-                        // 警告信息
-                        HStack(alignment: .top, spacing: 8) {
-                            ZStack {
-                                Circle()
-                                    .fill(Color(red: 0.2, green: 0.7, blue: 0.3))
-                                    .frame(width: 24, height: 24)
+                        // 提示信息
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: "info.circle.fill")
+                                .font(.system(size: 20))
+                                .foregroundColor(primaryGreen)
+                                .padding(.top, 2)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("多日未签到提醒")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.primary)
                                 
-                                Text("①")
-                                    .font(.system(size: 14, weight: .bold))
-                                    .foregroundColor(.white)
+                                Text("系统将以你的名义，在次日邮件通知你的紧急联系人")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                             
-                            Text("多日未签到, 系统将以你的名义, 在次日邮件通知你的紧急联系人")
-                                .font(.system(size: 14))
-                                .foregroundColor(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer()
                         }
-                        .padding(.horizontal, 24)
-                        .padding(.top, 10)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.secondary.opacity(0.1))
+                        )
+                        .padding(.horizontal, 20)
+                        .padding(.top, 16)
                         
                         // 协议链接
                         HStack(spacing: 4) {
                             Text("签到即同意")
-                                .font(.system(size: 12))
+                                .font(.caption)
                                 .foregroundColor(.secondary)
                             
                             Button(action: {
                                 showTermsOfService = true
                             }) {
                                 Text("用户协议")
-                                    .font(.system(size: 12))
+                                    .font(.caption)
                                     .foregroundColor(primaryGreen)
                             }
                             
                             Text("和")
-                                .font(.system(size: 12))
+                                .font(.caption)
                                 .foregroundColor(.secondary)
                             
                             Button(action: {
                                 showPrivacyPolicy = true
                             }) {
                                 Text("隐私政策")
-                                    .font(.system(size: 12))
+                                    .font(.caption)
                                     .foregroundColor(primaryGreen)
                             }
                         }
                         .padding(.top, 20)
-                        .padding(.bottom, 40)
+                        .padding(.bottom, 24)
                     }
+                    .padding(.horizontal, 16)
                 }
             }
         }
-    }
-}
+
+

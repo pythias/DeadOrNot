@@ -23,10 +23,12 @@ struct DeadOrNotApp: App {
                         store.scheduleMissedReminderIfNeeded()
                     }
             } else {
-                SetupView(userInfo: userInfo, isSetupComplete: .constant(false))
-                    .onAppear {
-                        store.reloadFromStorage()
-                    }
+                NavigationStack {
+                    SetupView(userInfo: userInfo, isSetupComplete: .constant(false), isStandalone: true)
+                }
+                .onAppear {
+                    store.reloadFromStorage()
+                }
             }
         }
     }
