@@ -16,6 +16,19 @@ APP_NAME="deadornot-backend"
 DEPLOY_DIR="/opt/deadornot/backend"
 SUPERVISOR_CONF_FILE="$DEPLOY_DIR/deploy/supervisor.conf"
 
+# 日志函数
+log_info() {
+    echo -e "${GREEN}[INFO]${NC} $1"
+}
+
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
 # 检测系统类型并设置相应变量
 detect_system() {
     if [ -f /etc/redhat-release ]; then
@@ -53,19 +66,6 @@ detect_system() {
 # 初始化系统检测
 detect_system
 
-# 日志函数
-log_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
-}
-
-log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
 # 检查是否为 root 用户
 check_root() {
     if [ "$EUID" -ne 0 ]; then 
@@ -84,6 +84,10 @@ check_go() {
     
     GO_VERSION=$(go version | awk '{print $3}')
     log_info "Go 版本: $GO_VERSION"
+
+    log_info "设置 Go 代理..."
+    export GOPROXY=https://mirrors.aliyun.com/goproxy/,https://proxy.golang.org,direct
+    export GOSUMDB=off
 }
 
 # 编译应用
