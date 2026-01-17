@@ -130,6 +130,22 @@ sudo mysql_secure_installation
 
 **注意**: CentOS 7 默认使用 MariaDB，CentOS 8+ 可以使用 MySQL 8.0
 
+### 4. 安装 Nginx（CentOS）
+
+```bash
+# CentOS 7/8
+sudo yum install -y nginx
+
+# 启动并设置开机自启
+sudo systemctl enable nginx
+sudo systemctl start nginx
+
+# 验证服务状态
+sudo systemctl status nginx
+```
+
+**注意**: Nginx 会在部署脚本中自动安装和配置，也可以手动安装
+
 ## 配置环境
 
 ### 1. 创建部署目录
@@ -189,6 +205,7 @@ sudo ./deploy/deploy.sh
 - 复制文件
 - 设置权限
 - 配置 Supervisor
+- 配置 Nginx
 - 启动服务
 
 ### 方式二：手动部署
@@ -215,6 +232,179 @@ sudo supervisorctl start deadornot-backend
 
 # 如果 Supervisor 服务未运行，启动它
 sudo systemctl restart supervisord
+```
+
+## Nginx 和 SSL 配置
+
+### 1. 配置域名
+
+部署脚本会自动复制 Nginx 配置文件，但需要手动修改域名：
+
+```bash
+# 编辑 Nginx 配置文件
+sudo nano /etc/nginx/conf.d/deadornot.conf
+```
+
+如果使用了 SSL 配置模板，也需要更新：
+
+```bash
+# 编辑 SSL 配置文件
+sudo nano /etc/nginx/conf.d/ssl.conf
+```
+
+### 2. 配置防火墙
+
+开放 80 和 443 端口：
+
+```bash
+# CentOS 7 (firewalld)
+sudo firewall-cmd --permanent --add-service=http
+sudo firewall-cmd --permanent --add-service=https
+sudo firewall-cmd --reload
+
+# 或者使用 iptables
+sudo iptables -A INPUT -p tcp --dport 80 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 443 -j ACCEPT
+sudo service iptables save
+```
+
+### 3. 获取 Let's Encrypt SSL 证书
+
+#### 方式一：使用自动脚本（推荐）
+
+**单域名证书**（如 alive.xiaodao.fun）：
+
+```bash
+# 运行 SSL 证书获取脚本
+sudo /opt/deadornot/backend/deploy/certbot/setup-ssl.sh alive.xiaodao.fun your-email@example.com
+
+# 示例
+sudo /opt/deadornot/backend/deploy/certbot/setup-ssl.sh alive.xiaodao.fun admin@example.com
+```
+
+脚本会自动：
+- 检查并安装 certbot
+- 更新 Nginx 配置中的域名
+- 获取 SSL 证书
+- 配置自动续期
+- 重启 Nginx
+
+**通配符证书**（如 *.xiaodao.fun）：
+
+Let's Encrypt 支持通配符证书，可以覆盖所有子域名（如 *.xiaodao.fun）。
+
+```bash
+# 运行通配符证书获取脚本
+sudo /opt/deadornot/backend/deploy/certbot/setup-wildcard-ssl.sh xiaodao.fun your-email@example.com
+
+# 示例
+sudo /opt/deadornot/backend/deploy/certbot/setup-wildcard-ssl.sh xiaodao.fun admin@example.com
+```
+
+**通配符证书说明**：
+- 证书将覆盖 `xiaodao.fun` 和 `*.xiaodao.fun`（所有子域名）
+- 需要使用 **DNS-01 验证方式**（不是 HTTP-01）
+- 需要手动添加 DNS TXT 记录进行验证
+- 证书路径：`/etc/letsencrypt/live/xiaodao.fun/`
+- 在 Nginx 配置中使用相同的证书路径即可
+
+**通配符证书申请步骤**：
+1. 运行脚本后，certbot 会显示需要添加的 DNS TXT 记录
+2. 在 DNS 管理界面添加 TXT 记录：
+   - 记录类型：TXT
+   - 记录名称：`_acme-challenge.xiaodao.fun`
+   - 记录值：certbot 显示的值
+3. 等待 DNS 记录生效（通常几分钟）
+4. 按回车继续，certbot 会验证并颁发证书
+
+**使用通配符证书的 Nginx 配置**：
+```nginx
+# 如果使用通配符证书 *.xiaodao.fun
+ssl_certificate /etc/letsencrypt/live/xiaodao.fun/fullchain.pem;
+ssl_certificate_key /etc/letsencrypt/live/xiaodao.fun/privkey.pem;
+ssl_trusted_certificate /etc/letsencrypt/live/xiaodao.fun/chain.pem;
+```
+
+#### 方式二：手动配置
+
+**单域名证书**：
+
+```bash
+# 1. 安装 certbot
+sudo yum install -y epel-release
+sudo yum install -y certbot python3-certbot-nginx
+
+# 2. 获取证书（使用 nginx 插件）
+sudo certbot --nginx -d alive.xiaodao.fun --email your-email@example.com --agree-tos --non-interactive
+
+# 3. 测试证书续期
+sudo certbot renew --dry-run
+```
+
+**通配符证书（手动方式）**：
+
+```bash
+# 1. 安装 certbot
+sudo yum install -y epel-release
+sudo yum install -y certbot
+
+# 2. 申请通配符证书（使用 DNS-01 验证）
+sudo certbot certonly --manual --preferred-challenges dns \
+  -d xiaodao.fun -d '*.xiaodao.fun' \
+  --email your-email@example.com --agree-tos
+
+# 3. 按照提示添加 DNS TXT 记录
+# 4. 等待 DNS 生效后按回车继续
+```
+
+### 4. 配置证书自动续期
+
+Let's Encrypt 证书有效期为 90 天，需要定期续期。certbot 会自动配置续期，但建议手动测试：
+
+```bash
+# 测试续期
+sudo certbot renew --dry-run
+
+# 手动续期
+sudo certbot renew
+
+# 查看证书信息
+sudo certbot certificates
+```
+
+配置 cron 任务自动续期（可选，certbot 通常已自动配置）：
+
+```bash
+# 编辑 crontab
+sudo crontab -e
+
+# 添加以下行（每月 1 号凌晨 3 点检查续期）
+0 3 1 * * /opt/deadornot/backend/deploy/certbot/renew-cert.sh >> /var/log/certbot-renew.log 2>&1
+```
+
+### 5. 重启 Nginx
+
+配置完成后重启 Nginx：
+
+```bash
+# 测试配置
+sudo nginx -t
+
+# 重启 Nginx
+sudo systemctl restart nginx
+
+# 查看状态
+sudo systemctl status nginx
+```
+
+### 6. 验证 SSL 配置
+
+```bash
+# 测试 HTTPS 连接
+curl -I https://your-domain.com/api/health
+
+# 使用浏览器访问
+# https://your-domain.com/api/health
 ```
 
 ## 服务管理
@@ -254,6 +444,32 @@ tail -f /opt/deadornot/backend/logs/app.log
 
 # 错误日志
 tail -f /opt/deadornot/backend/logs/error.log
+```
+
+### Nginx 命令
+
+```bash
+# 查看 Nginx 状态
+sudo systemctl status nginx
+
+# 启动 Nginx
+sudo systemctl start nginx
+
+# 停止 Nginx
+sudo systemctl stop nginx
+
+# 重启 Nginx
+sudo systemctl restart nginx
+
+# 重载配置（不中断服务）
+sudo systemctl reload nginx
+
+# 测试配置
+sudo nginx -t
+
+# 查看 Nginx 日志
+sudo tail -f /var/log/nginx/deadornot-access.log
+sudo tail -f /var/log/nginx/deadornot-error.log
 ```
 
 ### 健康检查
@@ -417,14 +633,79 @@ sudo useradd -r -s /sbin/nologin www
 - 检查阿里云邮件服务是否已开通
 - 查看错误日志获取详细错误信息
 
+### 7. Nginx 无法启动
+
+**问题**: Nginx 服务无法启动
+
+**解决方案**:
+```bash
+# 检查配置语法
+sudo nginx -t
+
+# 查看错误日志
+sudo tail -50 /var/log/nginx/error.log
+
+# 检查端口占用
+sudo netstat -tlnp | grep -E ':(80|443)'
+
+# 检查 SELinux（CentOS）
+sudo getenforce
+# 如果为 Enforcing，可能需要设置 SELinux 上下文
+```
+
+### 8. SSL 证书获取失败
+
+**问题**: Let's Encrypt 证书获取失败
+
+**解决方案**:
+- 确保域名已正确解析到服务器 IP
+- 检查防火墙是否开放 80 端口（Let's Encrypt 需要验证）
+- 确保 Nginx 配置正确，可以访问 `http://your-domain.com/.well-known/acme-challenge/`
+- 检查 certbot 日志: `sudo tail -f /var/log/letsencrypt/letsencrypt.log`
+- 如果使用测试模式: `TEST_MODE=true sudo /opt/deadornot/backend/deploy/certbot/setup-ssl.sh your-domain.com`
+
+### 9. HTTPS 访问失败
+
+**问题**: 无法通过 HTTPS 访问
+
+**解决方案**:
+- 检查 SSL 证书是否存在: `sudo ls -la /etc/letsencrypt/live/alive.xiaodao.fun/`
+- 检查 Nginx 配置中的证书路径是否正确
+- 检查防火墙是否开放 443 端口
+- 查看 Nginx 错误日志: `sudo tail -f /var/log/nginx/deadornot-error.log`
+- 测试 SSL 连接: `openssl s_client -connect alive.xiaodao.fun:443`
+
+### 10. 通配符证书申请失败
+
+**问题**: 通配符证书（*.xiaodao.fun）申请失败
+
+**解决方案**:
+- 确保使用 DNS-01 验证方式（不是 HTTP-01）
+- 检查 DNS TXT 记录是否正确添加：
+  ```bash
+  # 检查 DNS 记录
+  dig _acme-challenge.xiaodao.fun TXT
+  ```
+- 确保 DNS 记录已生效（可能需要几分钟到几小时）
+- 检查域名解析是否正确
+- 如果使用测试模式，设置 `TEST_MODE=true` 环境变量
+- 查看 certbot 日志: `sudo tail -f /var/log/letsencrypt/letsencrypt.log`
+
+**通配符证书使用说明**：
+- 通配符证书路径：`/etc/letsencrypt/live/xiaodao.fun/`（注意是根域名，不是子域名）
+- 在 Nginx 配置中，所有使用 `*.xiaodao.fun` 的 server 块都可以使用同一个证书
+- 证书同时覆盖 `xiaodao.fun` 和 `*.xiaodao.fun`
+
 ## 安全建议
 
-1. **防火墙配置**: 只开放必要的端口（如 8080）
-2. **数据库安全**: 使用强密码，限制数据库用户权限
-3. **文件权限**: 确保敏感文件（.env, .p8）权限正确
-4. **定期更新**: 及时更新系统和应用依赖
-5. **日志监控**: 定期检查日志，发现异常及时处理
-6. **备份**: 定期备份数据库和配置文件
+1. **防火墙配置**: 只开放必要的端口（80, 443, 22）
+2. **SSL/TLS**: 使用 Let's Encrypt 配置 HTTPS，确保所有通信加密
+3. **数据库安全**: 使用强密码，限制数据库用户权限
+4. **文件权限**: 确保敏感文件（.env, .p8, SSL 证书）权限正确
+5. **定期更新**: 及时更新系统和应用依赖
+6. **日志监控**: 定期检查日志，发现异常及时处理
+7. **备份**: 定期备份数据库和配置文件
+8. **证书续期**: 确保 SSL 证书自动续期正常工作
 
 ## 联系支持
 

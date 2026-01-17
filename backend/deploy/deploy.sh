@@ -135,6 +135,23 @@ copy_files() {
     if [ -f deploy/supervisor.conf ]; then
         cp deploy/supervisor.conf "$DEPLOY_DIR/deploy/"
     fi
+
+    # 复制 start.sh 脚本
+    if [ -f deploy/start.sh ]; then
+        cp deploy/start.sh "$DEPLOY_DIR/deploy/"
+    fi
+    
+    # 复制 nginx 配置文件
+    if [ -d deploy/nginx ]; then
+        mkdir -p "$DEPLOY_DIR/deploy/nginx"
+        cp -r deploy/nginx/* "$DEPLOY_DIR/deploy/nginx/" 2>/dev/null || true
+    fi
+    
+    # 复制 certbot 脚本
+    if [ -d deploy/certbot ]; then
+        mkdir -p "$DEPLOY_DIR/deploy/certbot"
+        cp -r deploy/certbot/* "$DEPLOY_DIR/deploy/certbot/" 2>/dev/null || true
+    fi
     
     # 复制环境变量示例（如果不存在）
     if [ ! -f "$DEPLOY_DIR/config/.env" ] && [ -f deploy/env.example ]; then
@@ -203,6 +220,80 @@ setup_supervisor() {
     log_info "Supervisor 配置完成"
 }
 
+# 配置 Nginx
+setup_nginx() {
+    log_info "配置 Nginx..."
+    
+    # 检查 Nginx 是否安装
+    if ! command -v nginx &> /dev/null; then
+        log_info "Nginx 未安装，开始安装..."
+        
+        if [ "$SYSTEM_TYPE" = "centos" ]; then
+            yum install -y nginx
+            NGINX_CONF_DIR="/etc/nginx/conf.d"
+            NGINX_USER="nginx"
+        else
+            apt-get update
+            apt-get install -y nginx
+            NGINX_CONF_DIR="/etc/nginx/conf.d"
+            NGINX_USER="www-data"
+        fi
+        
+        # 启动并设置开机自启
+        systemctl enable nginx
+        systemctl start nginx
+        
+        log_info "Nginx 安装完成"
+    else
+        log_info "Nginx 已安装"
+        
+        if [ "$SYSTEM_TYPE" = "centos" ]; then
+            NGINX_CONF_DIR="/etc/nginx/conf.d"
+            NGINX_USER="nginx"
+        else
+            NGINX_CONF_DIR="/etc/nginx/conf.d"
+            NGINX_USER="www-data"
+        fi
+    fi
+    
+    # 创建 certbot webroot 目录
+    WEBROOT="/var/www/certbot"
+    mkdir -p $WEBROOT
+    chown -R $NGINX_USER:$NGINX_USER $WEBROOT
+    
+    # 复制 nginx 配置文件
+    if [ -f "$DEPLOY_DIR/deploy/nginx/deadornot.conf" ]; then
+        cp "$DEPLOY_DIR/deploy/nginx/deadornot.conf" "$NGINX_CONF_DIR/deadornot.conf"
+        log_info "Nginx 配置文件已复制: $NGINX_CONF_DIR/deadornot.conf"
+    else
+        log_warn "Nginx 配置文件不存在: $DEPLOY_DIR/deploy/nginx/deadornot.conf"
+    fi
+    
+    # 复制 SSL 配置模板
+    if [ -f "$DEPLOY_DIR/deploy/nginx/ssl.conf" ]; then
+        cp "$DEPLOY_DIR/deploy/nginx/ssl.conf" "$NGINX_CONF_DIR/ssl.conf"
+        log_info "SSL 配置模板已复制: $NGINX_CONF_DIR/ssl.conf"
+    fi
+    
+    # 测试 nginx 配置
+    if nginx -t 2>/dev/null; then
+        log_info "Nginx 配置测试通过"
+        # 不立即重启，等待用户配置域名和 SSL 证书
+        log_info "配置域名和 SSL 证书后，运行: systemctl restart nginx"
+    else
+        log_warn "Nginx 配置测试失败，请检查配置文件"
+        log_info "配置文件位置: $NGINX_CONF_DIR/deadornot.conf"
+    fi
+    
+    log_info "Nginx 配置完成"
+    log_info ""
+    log_info "下一步："
+    log_info "1. 运行 SSL 证书获取脚本:"
+    log_info "   - 单域名: $DEPLOY_DIR/deploy/certbot/setup-ssl.sh alive.xiaodao.fun [email]"
+    log_info "   - 通配符: $DEPLOY_DIR/deploy/certbot/setup-wildcard-ssl.sh xiaodao.fun [email]"
+    log_info "2. 重启 Nginx: systemctl restart nginx"
+}
+
 # 启动服务
 start_service() {
     log_info "启动服务..."
@@ -235,6 +326,7 @@ main() {
     copy_files
     set_permissions
     setup_supervisor
+    setup_nginx
     start_service
     
     log_info "部署完成！"
@@ -250,6 +342,12 @@ main() {
     if [ "$SYSTEM_TYPE" = "centos" ]; then
         log_info "  重启 Supervisor: systemctl restart supervisord"
     fi
+    log_info ""
+    log_info "Nginx 相关命令:"
+    log_info "  查看 Nginx 状态: systemctl status nginx"
+    log_info "  重启 Nginx: systemctl restart nginx"
+    log_info "  测试配置: nginx -t"
+    log_info "  查看 Nginx 日志: tail -f /var/log/nginx/deadornot-error.log"
 }
 
 # 执行主函数
