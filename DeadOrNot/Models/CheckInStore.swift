@@ -47,8 +47,31 @@ final class CheckInStore: ObservableObject {
     
     private func syncFromServer() async {
         do {
-            let serverDates = try await apiService.getCheckInHistory()
+            let serverDatetimes = try await apiService.getCheckInHistory()
             isLoading = true
+            
+            // 将 RFC 3339 格式的时间转换为日期字符串（yyyy-MM-dd）
+            // 尝试两种格式：带小数秒和不带小数秒
+            let formatterWithFraction = ISO8601DateFormatter()
+            formatterWithFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            
+            let formatterWithoutFraction = ISO8601DateFormatter()
+            formatterWithoutFraction.formatOptions = [.withInternetDateTime]
+            
+            let dateFormatter = self.dateFormatter()
+            
+            let serverDates = serverDatetimes.compactMap { datetimeStr -> String? in
+                var date: Date?
+                // 先尝试带小数秒的格式
+                date = formatterWithFraction.date(from: datetimeStr)
+                // 如果失败，尝试不带小数秒的格式
+                if date == nil {
+                    date = formatterWithoutFraction.date(from: datetimeStr)
+                }
+                guard let date = date else { return nil }
+                return dateFormatter.string(from: date)
+            }
+            
             dates = Set(serverDates)
             saveToStorage()
             isLoading = false
@@ -91,10 +114,10 @@ final class CheckInStore: ObservableObject {
         dates.insert(key)
         saveToStorage()
         
-        // 然后同步到服务器
+        // 然后同步到服务器（发送完整时间，RFC 3339 格式）
         Task {
             do {
-                _ = try await apiService.checkIn(date: key)
+                _ = try await apiService.checkIn(datetime: nil) // nil 表示使用当前时间
                 // 服务器同步成功，本地数据已是最新
             } catch {
                 // 如果服务器同步失败，保持本地数据

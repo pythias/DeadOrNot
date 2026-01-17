@@ -177,14 +177,17 @@ func (ns *NotificationService) sendNotification(notif *models.Notification) erro
 			return fmt.Errorf("push service not available")
 		}
 		// 需要从数据库获取用户的APNS token
-		var apnsToken string
+		var apnsToken sql.NullString
 		err := ns.db.QueryRow(`
 			SELECT apns_token FROM users WHERE id = ?
 		`, notif.UserID).Scan(&apnsToken)
 		if err != nil {
 			return fmt.Errorf("failed to get APNS token: %w", err)
 		}
-		return ns.pushService.SendPush(apnsToken, notif.Content.Subject, notif.Content.Body, notif.Content.Data)
+		if !apnsToken.Valid || apnsToken.String == "" {
+			return fmt.Errorf("APNS token not available for user")
+		}
+		return ns.pushService.SendPush(apnsToken.String, notif.Content.Subject, notif.Content.Body, notif.Content.Data)
 	case "sms":
 		return fmt.Errorf("SMS not yet implemented")
 	default:

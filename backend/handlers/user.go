@@ -16,13 +16,14 @@ func GetUser(db *sql.DB) gin.HandlerFunc {
 
 		var user models.User
 		var emailsJSON string
+		var apnsToken sql.NullString
 		err := db.QueryRow(`
 			SELECT id, device_id, name, emergency_contact_emails, apns_token, 
 			       push_enabled, email_enabled, timezone, created_at, updated_at
 			FROM users WHERE id = ?
 		`, userID).Scan(
 			&user.ID, &user.DeviceID, &user.Name, &emailsJSON,
-			&user.APNSToken, &user.PushEnabled, &user.EmailEnabled,
+			&apnsToken, &user.PushEnabled, &user.EmailEnabled,
 			&user.Timezone, &user.CreatedAt, &user.UpdatedAt,
 		)
 
@@ -33,6 +34,13 @@ func GetUser(db *sql.DB) gin.HandlerFunc {
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
 			return
+		}
+
+		// 处理可能为 NULL 的 apns_token
+		if apnsToken.Valid {
+			user.APNSToken = apnsToken.String
+		} else {
+			user.APNSToken = ""
 		}
 
 		// 解析JSON字段

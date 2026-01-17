@@ -3,18 +3,23 @@ import Foundation
 // MARK: - CheckIn Response
 struct CheckInResponse: Codable {
     let message: String
-    let date: String
+    let datetime: String // RFC 3339 格式
+    
+    enum CodingKeys: String, CodingKey {
+        case message
+        case datetime
+    }
 }
 
 // MARK: - CheckIn Stats
 struct CheckInStats: Codable {
     let currentStreak: Int
-    let lastCheckinDate: String?
+    let lastCheckinDateTime: String? // RFC 3339 格式
     let totalDays: Int
     
     enum CodingKeys: String, CodingKey {
         case currentStreak = "current_streak"
-        case lastCheckinDate = "last_checkin_date"
+        case lastCheckinDateTime = "last_checkin_datetime"
         case totalDays = "total_days"
     }
 }

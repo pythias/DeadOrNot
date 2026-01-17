@@ -13,52 +13,68 @@ import (
 func CheckIn(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := c.GetInt64("user_id")
-		timezone := c.GetString("timezone")
-		if timezone == "" {
-			timezone = "UTC"
-		}
 
 		var req struct {
-			Date string `json:"date"` // yyyy-MM-dd格式，可选
+			DateTime string `json:"datetime"` // RFC 3339 格式，可选
 		}
 
-		c.ShouldBindJSON(&req)
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+			return
+		}
 
-		var checkInDate time.Time
+		var checkInDateTime time.Time
 		var err error
 
-		if req.Date != "" {
-			// 使用提供的日期
-			checkInDate, err = utils.ParseDateInTimezone(req.Date, timezone)
+		if req.DateTime != "" {
+			// 解析 RFC 3339 格式时间
+			checkInDateTime, err = time.Parse(time.RFC3339, req.DateTime)
 			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid date format"})
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid datetime format, expected RFC 3339"})
 				return
 			}
 		} else {
-			// 使用今天
-			checkInDate, err = utils.GetTodayInTimezone(timezone)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get today's date"})
-				return
-			}
+			// 如果没有提供时间，使用当前 UTC 时间
+			checkInDateTime = time.Now().UTC()
 		}
 
-		// 插入打卡记录（使用ON DUPLICATE KEY UPDATE处理重复）
+		// 转换为 UTC（确保是 UTC）
+		checkInDateTime = checkInDateTime.UTC()
+
+		// 检查同一天是否已打卡
+		var exists bool
+		err = db.QueryRow(`
+			SELECT EXISTS(
+				SELECT 1 FROM checkins 
+				WHERE user_id = ? AND DATE(checkin_datetime) = DATE(?)
+			)
+		`, userID, checkInDateTime).Scan(&exists)
+
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+			return
+		}
+
+		if exists {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Already checked in today"})
+			return
+		}
+
+		// 插入打卡记录
 		_, err = db.Exec(`
-			INSERT INTO checkins (user_id, checkin_date) 
-			VALUES (?, DATE(?))
-			ON DUPLICATE KEY UPDATE created_at = created_at
-		`, userID, checkInDate)
+			INSERT INTO checkins (user_id, checkin_datetime) 
+			VALUES (?, ?)
+		`, userID, checkInDateTime)
 
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check in"})
 			return
 		}
 
-		dateStr, _ := utils.GetDateStringInTimezone(checkInDate, timezone)
+		// 返回 RFC 3339 格式的时间
 		c.JSON(http.StatusOK, gin.H{
-			"message": "Check-in successful",
-			"date":    dateStr,
+			"message":  "Check-in successful",
+			"datetime": checkInDateTime.Format(time.RFC3339),
 		})
 	}
 }
@@ -75,22 +91,22 @@ func GetCheckInHistory(db *sql.DB) gin.HandlerFunc {
 		startDate := c.Query("start_date")
 		endDate := c.Query("end_date")
 
-		query := "SELECT checkin_date FROM checkins WHERE user_id = ?"
+		query := "SELECT checkin_datetime FROM checkins WHERE user_id = ?"
 		args := []interface{}{userID}
 
 		if startDate != "" {
-			query += " AND checkin_date >= DATE(?)"
+			query += " AND DATE(checkin_datetime) >= DATE(?)"
 			startTime, _ := utils.ParseDateInTimezone(startDate, timezone)
 			args = append(args, startTime)
 		}
 
 		if endDate != "" {
-			query += " AND checkin_date <= DATE(?)"
+			query += " AND DATE(checkin_datetime) <= DATE(?)"
 			endTime, _ := utils.ParseDateInTimezone(endDate, timezone)
 			args = append(args, endTime)
 		}
 
-		query += " ORDER BY checkin_date DESC"
+		query += " ORDER BY checkin_datetime DESC"
 
 		rows, err := db.Query(query, args...)
 		if err != nil {
@@ -99,17 +115,17 @@ func GetCheckInHistory(db *sql.DB) gin.HandlerFunc {
 		}
 		defer rows.Close()
 
-		var dates []string
+		var datetimes []string = []string{}
 		for rows.Next() {
-			var date time.Time
-			if err := rows.Scan(&date); err != nil {
+			var datetime time.Time
+			if err := rows.Scan(&datetime); err != nil {
 				continue
 			}
-			dateStr, _ := utils.GetDateStringInTimezone(date, timezone)
-			dates = append(dates, dateStr)
+			// 返回 RFC 3339 格式
+			datetimes = append(datetimes, datetime.Format(time.RFC3339))
 		}
 
-		c.JSON(http.StatusOK, gin.H{"dates": dates})
+		c.JSON(http.StatusOK, gin.H{"datetimes": datetimes})
 	}
 }
 
@@ -122,10 +138,10 @@ func GetCheckInStats(db *sql.DB) gin.HandlerFunc {
 			timezone = "UTC"
 		}
 
-		// 获取最后打卡日期
+		// 获取最后打卡时间
 		var lastCheckIn sql.NullTime
 		err := db.QueryRow(`
-			SELECT MAX(checkin_date) FROM checkins WHERE user_id = ?
+			SELECT MAX(checkin_datetime) FROM checkins WHERE user_id = ?
 		`, userID).Scan(&lastCheckIn)
 
 		if err != nil && err != sql.ErrNoRows {
@@ -133,13 +149,14 @@ func GetCheckInStats(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 
-		var lastCheckInDate *string
+		var lastCheckInDateTime *string
 		var currentStreak int
 		var totalDays int
 
 		if lastCheckIn.Valid {
-			dateStr, _ := utils.GetDateStringInTimezone(lastCheckIn.Time, timezone)
-			lastCheckInDate = &dateStr
+			// 返回 RFC 3339 格式
+			datetimeStr := lastCheckIn.Time.Format(time.RFC3339)
+			lastCheckInDateTime = &datetimeStr
 
 			// 计算连续打卡天数
 			daysSince, _ := utils.DaysSinceInTimezone(lastCheckIn.Time, timezone)
@@ -147,13 +164,13 @@ func GetCheckInStats(db *sql.DB) gin.HandlerFunc {
 			if daysSince == 0 {
 				// 今天已打卡，计算连续天数
 				currentStreak = 1
-				checkDate := lastCheckIn.Time
+				checkDateTime := lastCheckIn.Time
 				for {
-					checkDate = checkDate.AddDate(0, 0, -1)
+					checkDateTime = checkDateTime.AddDate(0, 0, -1)
 					var exists bool
 					err := db.QueryRow(`
-						SELECT EXISTS(SELECT 1 FROM checkins WHERE user_id = ? AND checkin_date = DATE(?))
-					`, userID, checkDate).Scan(&exists)
+						SELECT EXISTS(SELECT 1 FROM checkins WHERE user_id = ? AND DATE(checkin_datetime) = DATE(?))
+					`, userID, checkDateTime).Scan(&exists)
 					if err != nil || !exists {
 						break
 					}
@@ -162,9 +179,9 @@ func GetCheckInStats(db *sql.DB) gin.HandlerFunc {
 			}
 		}
 
-		// 获取总打卡天数
+		// 获取总打卡天数（使用生成列 checkin_date 或 DATE 函数）
 		err = db.QueryRow(`
-			SELECT COUNT(DISTINCT checkin_date) FROM checkins WHERE user_id = ?
+			SELECT COUNT(DISTINCT DATE(checkin_datetime)) FROM checkins WHERE user_id = ?
 		`, userID).Scan(&totalDays)
 
 		if err != nil {
@@ -172,9 +189,9 @@ func GetCheckInStats(db *sql.DB) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"current_streak":    currentStreak,
-			"last_checkin_date": lastCheckInDate,
-			"total_days":        totalDays,
+			"current_streak":        currentStreak,
+			"last_checkin_datetime": lastCheckInDateTime,
+			"total_days":            totalDays,
 		})
 	}
 }

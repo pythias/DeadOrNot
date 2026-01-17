@@ -82,11 +82,17 @@ func (ss *SchedulerService) scheduleDailyPushReminders() {
 
 	for rows.Next() {
 		var userID int64
-		var apnsToken, timezone string
+		var apnsToken sql.NullString
+		var timezone string
 		var pushEnabled bool
 
 		if err := rows.Scan(&userID, &apnsToken, &timezone, &pushEnabled); err != nil {
 			log.Printf("Failed to scan user: %v", err)
+			continue
+		}
+
+		// 跳过无效的 token
+		if !apnsToken.Valid || apnsToken.String == "" {
 			continue
 		}
 
@@ -104,7 +110,7 @@ func (ss *SchedulerService) scheduleDailyPushReminders() {
 		// 检查今天是否已打卡
 		var exists bool
 		err = ss.db.QueryRow(`
-			SELECT EXISTS(SELECT 1 FROM checkins WHERE user_id = ? AND checkin_date = DATE(?))
+			SELECT EXISTS(SELECT 1 FROM checkins WHERE user_id = ? AND DATE(checkin_datetime) = DATE(?))
 		`, userID, today).Scan(&exists)
 
 		if err != nil {
@@ -148,7 +154,7 @@ func (ss *SchedulerService) scheduleDailyPushReminders() {
 			}
 
 			err = ss.notificationService.CreateNotification(
-				userID, "push", apnsToken, timezone, scheduledAt, content, uniqueKey,
+				userID, "push", apnsToken.String, timezone, scheduledAt, content, uniqueKey,
 			)
 
 			if err != nil {
@@ -192,10 +198,10 @@ func (ss *SchedulerService) checkThreeDaysMissedCheckIns() {
 			continue
 		}
 
-		// 获取最后打卡日期
+		// 获取最后打卡时间
 		var lastCheckIn sql.NullTime
 		err = ss.db.QueryRow(`
-			SELECT MAX(checkin_date) FROM checkins WHERE user_id = ?
+			SELECT MAX(checkin_datetime) FROM checkins WHERE user_id = ?
 		`, userID).Scan(&lastCheckIn)
 
 		if err != nil && err != sql.ErrNoRows {
@@ -216,8 +222,8 @@ func (ss *SchedulerService) checkThreeDaysMissedCheckIns() {
 			daysSince = 0
 		}
 
-		// 如果超过3天未打卡
-		if daysSince >= 3 {
+		// 如果超过3天未打卡，但小于7天，则发送邮件提醒
+		if daysSince >= 3 && daysSince < 7 {
 			// 获取用户时区的今天日期字符串
 			today, _ := utils.GetTodayInTimezone(timezone)
 			dateStr, _ := utils.GetDateStringInTimezone(today, timezone)

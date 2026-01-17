@@ -49,7 +49,7 @@ func (es *EmailService) sendViaAliyun(to, subject, body string) error {
 	// 构建请求体（简化版，实际需要根据阿里云API文档）
 	payload := map[string]interface{}{
 		"Action":           "SingleSendMail",
-		"AccountName":       es.config.Email.FromEmail,
+		"AccountName":      es.config.Email.FromEmail,
 		"ReplyToAddress":   "false",
 		"AddressType":      "1",
 		"ToAddress":        to,
@@ -58,7 +58,7 @@ func (es *EmailService) sendViaAliyun(to, subject, body string) error {
 		"FromAlias":        es.config.Email.FromName,
 		"AccessKeyId":      es.config.Email.AliyunKey,
 		"Format":           "JSON",
-		"SignatureMethod": "HMAC-SHA1",
+		"SignatureMethod":  "HMAC-SHA1",
 		"SignatureVersion": "1.0",
 		"Version":          "2015-11-23",
 		"Timestamp":        time.Now().UTC().Format("2006-01-02T15:04:05Z"),

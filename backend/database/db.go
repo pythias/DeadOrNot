@@ -71,7 +71,8 @@ const createCheckInsTable = `
 CREATE TABLE IF NOT EXISTS checkins (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT NOT NULL,
-    checkin_date DATE NOT NULL,
+    checkin_datetime DATETIME NOT NULL,
+    checkin_date DATE GENERATED ALWAYS AS (DATE(checkin_datetime)) STORED,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     UNIQUE KEY user_date (user_id, checkin_date)

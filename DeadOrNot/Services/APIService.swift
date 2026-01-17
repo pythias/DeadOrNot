@@ -69,12 +69,23 @@ final class APIService {
     
     // MARK: - CheckIn APIs
     
-    func checkIn(date: String? = nil) async throws -> CheckInResponse {
+    func checkIn(datetime: String? = nil) async throws -> CheckInResponse {
         struct CheckInRequest: Codable {
-            let date: String?
+            let datetime: String?
         }
         
-        let request = CheckInRequest(date: date)
+        // 如果没有提供 datetime，使用当前时间的 RFC 3339 格式
+        let datetimeString: String
+        if let datetime = datetime {
+            datetimeString = datetime
+        } else {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime] // RFC 3339 标准格式
+            formatter.timeZone = TimeZone.current
+            datetimeString = formatter.string(from: Date())
+        }
+        
+        let request = CheckInRequest(datetime: datetimeString)
         return try await makeRequest(endpoint: "/checkin", method: "POST", body: request)
     }
     
@@ -98,11 +109,11 @@ final class APIService {
         }
         
         struct HistoryResponse: Codable {
-            let dates: [String]
+            let datetimes: [String]
         }
         
         let response: HistoryResponse = try await makeRequest(endpoint: endpoint)
-        return response.dates
+        return response.datetimes
     }
     
     func getCheckInStats() async throws -> CheckInStats {
