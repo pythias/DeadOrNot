@@ -152,6 +152,12 @@ copy_files() {
         mkdir -p "$DEPLOY_DIR/deploy/certbot"
         cp -r deploy/certbot/* "$DEPLOY_DIR/deploy/certbot/" 2>/dev/null || true
     fi
+
+    # 复制 acme.sh 脚本
+    if [ -d deploy/acme ]; then
+        mkdir -p "$DEPLOY_DIR/deploy/acme"
+        cp -r deploy/acme/* "$DEPLOY_DIR/deploy/acme/" 2>/dev/null || true
+    fi
     
     # 复制环境变量示例（如果不存在）
     if [ ! -f "$DEPLOY_DIR/config/.env" ] && [ -f deploy/env.example ]; then
@@ -274,7 +280,13 @@ setup_nginx() {
         cp "$DEPLOY_DIR/deploy/nginx/ssl.conf" "$NGINX_CONF_DIR/ssl.conf"
         log_info "SSL 配置模板已复制: $NGINX_CONF_DIR/ssl.conf"
     fi
-    
+
+    # 复制首页静态站点公共片段（xiaodao.fun / www.xiaodao.fun 共用，.inc 避免被 conf.d/*.conf 直接加载）
+    if [ -f "$DEPLOY_DIR/deploy/nginx/snippet-home.inc" ]; then
+        cp "$DEPLOY_DIR/deploy/nginx/snippet-home.inc" "$NGINX_CONF_DIR/snippet-home.inc"
+        log_info "Nginx 片段已复制: $NGINX_CONF_DIR/snippet-home.inc"
+    fi
+
     # 测试 nginx 配置
     if nginx -t 2>/dev/null; then
         log_info "Nginx 配置测试通过"
@@ -288,9 +300,9 @@ setup_nginx() {
     log_info "Nginx 配置完成"
     log_info ""
     log_info "下一步："
-    log_info "1. 运行 SSL 证书获取脚本:"
-    log_info "   - 单域名: $DEPLOY_DIR/deploy/certbot/setup-ssl.sh alive.xiaodao.fun [email]"
-    log_info "   - 通配符: $DEPLOY_DIR/deploy/certbot/setup-wildcard-ssl.sh xiaodao.fun [email]"
+    log_info "1. 运行 SSL 证书获取脚本 (acme.sh):"
+    log_info "   - 单域名: $DEPLOY_DIR/deploy/acme/setup-ssl.sh alive.xiaodao.fun [email]"
+    log_info "   - 通配符: $DEPLOY_DIR/deploy/acme/setup-wildcard-ssl.sh xiaodao.fun [email]"
     log_info "2. 重启 Nginx: systemctl restart nginx"
 }
 

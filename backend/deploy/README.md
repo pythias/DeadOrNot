@@ -236,23 +236,7 @@ sudo systemctl restart supervisord
 
 ## Nginx 和 SSL 配置
 
-### 1. 配置域名
-
-部署脚本会自动复制 Nginx 配置文件，但需要手动修改域名：
-
-```bash
-# 编辑 Nginx 配置文件
-sudo nano /etc/nginx/conf.d/deadornot.conf
-```
-
-如果使用了 SSL 配置模板，也需要更新：
-
-```bash
-# 编辑 SSL 配置文件
-sudo nano /etc/nginx/conf.d/ssl.conf
-```
-
-### 2. 配置防火墙
+### 1. 配置防火墙
 
 开放 80 和 443 端口：
 
@@ -268,121 +252,42 @@ sudo iptables -A INPUT -p tcp --dport 443 -j ACCEPT
 sudo service iptables save
 ```
 
-### 3. 获取 Let's Encrypt SSL 证书
-
-#### 方式一：使用自动脚本（推荐）
-
-**单域名证书**（如 alive.xiaodao.fun）：
+### 2. 获取 SSL 证书
 
 ```bash
-# 运行 SSL 证书获取脚本
-sudo /opt/deadornot/backend/deploy/certbot/setup-ssl.sh alive.xiaodao.fun your-email@example.com
+# 1. 安装 acme.sh
+curl https://get.acme.sh | sh -s email=pythias@gmail.com
 
-# 示例
-sudo /opt/deadornot/backend/deploy/certbot/setup-ssl.sh alive.xiaodao.fun admin@example.com
+# 2. 获取证书
+~/.acme.sh/acme.sh --issue -d '*.xiaodao.fun' --dns --yes-I-know-dns-manual-mode-enough-go-ahead-please
+~/.acme.sh/acme.sh --issue -d xiaodao.fun --dns --yes-I-know-dns-manual-mode-enough-go-ahead-please
+
+# 3. 添加txt域名解析
+dig _acme-challenge.xiaodao.fun TXT
+
+# 4. 再次获取证书
+~/.acme.sh/acme.sh --renew -d '*.xiaodao.fun' --dns --yes-I-know-dns-manual-mode-enough-go-ahead-please
+~/.acme.sh/acme.sh --renew -d xiaodao.fun --dns --yes-I-know-dns-manual-mode-enough-go-ahead-please
+
 ```
 
-脚本会自动：
-- 检查并安装 certbot
-- 更新 Nginx 配置中的域名
-- 获取 SSL 证书
-- 配置自动续期
-- 重启 Nginx
+### 3. 配置证书自动续期
 
-**通配符证书**（如 *.xiaodao.fun）：
-
-Let's Encrypt 支持通配符证书，可以覆盖所有子域名（如 *.xiaodao.fun）。
+acme.sh 会自动通过 crontab 续期。建议手动查看证书列表确认：
 
 ```bash
-# 运行通配符证书获取脚本
-sudo /opt/deadornot/backend/deploy/certbot/setup-wildcard-ssl.sh xiaodao.fun your-email@example.com
-
-# 示例
-sudo /opt/deadornot/backend/deploy/certbot/setup-wildcard-ssl.sh xiaodao.fun admin@example.com
-```
-
-**通配符证书说明**：
-- 证书将覆盖 `xiaodao.fun` 和 `*.xiaodao.fun`（所有子域名）
-- 需要使用 **DNS-01 验证方式**（不是 HTTP-01）
-- 需要手动添加 DNS TXT 记录进行验证
-- 证书路径：`/etc/letsencrypt/live/xiaodao.fun/`
-- 在 Nginx 配置中使用相同的证书路径即可
-
-**通配符证书申请步骤**：
-1. 运行脚本后，certbot 会显示需要添加的 DNS TXT 记录
-2. 在 DNS 管理界面添加 TXT 记录：
-   - 记录类型：TXT
-   - 记录名称：`_acme-challenge.xiaodao.fun`
-   - 记录值：certbot 显示的值
-3. 等待 DNS 记录生效（通常几分钟）
-4. 按回车继续，certbot 会验证并颁发证书
-
-**使用通配符证书的 Nginx 配置**：
-```nginx
-# 如果使用通配符证书 *.xiaodao.fun
-ssl_certificate /etc/letsencrypt/live/xiaodao.fun/fullchain.pem;
-ssl_certificate_key /etc/letsencrypt/live/xiaodao.fun/privkey.pem;
-ssl_trusted_certificate /etc/letsencrypt/live/xiaodao.fun/chain.pem;
-```
-
-#### 方式二：手动配置
-
-**单域名证书**：
-
-```bash
-# 1. 安装 certbot
-sudo yum install -y epel-release
-sudo yum install -y certbot python3-certbot-nginx
-
-# 2. 获取证书（使用 nginx 插件）
-sudo certbot --nginx -d alive.xiaodao.fun --email your-email@example.com --agree-tos --non-interactive
-
-# 3. 测试证书续期
-sudo certbot renew --dry-run
-```
-
-**通配符证书（手动方式）**：
-
-```bash
-# 1. 安装 certbot
-sudo yum install -y epel-release
-sudo yum install -y certbot
-
-# 2. 申请通配符证书（使用 DNS-01 验证）
-sudo certbot certonly --manual --preferred-challenges dns \
-  -d xiaodao.fun -d '*.xiaodao.fun' \
-  --email your-email@example.com --agree-tos
-
-# 3. 按照提示添加 DNS TXT 记录
-# 4. 等待 DNS 生效后按回车继续
-```
-
-### 4. 配置证书自动续期
-
-Let's Encrypt 证书有效期为 90 天，需要定期续期。certbot 会自动配置续期，但建议手动测试：
-
-```bash
-# 测试续期
-sudo certbot renew --dry-run
-
-# 手动续期
-sudo certbot renew
-
 # 查看证书信息
-sudo certbot certificates
+sudo ~/.acme.sh/acme.sh --list
 ```
 
-配置 cron 任务自动续期（可选，certbot 通常已自动配置）：
+配置自动续期（通常 acme.sh 安装时已自动配置 crontab）：
 
 ```bash
-# 编辑 crontab
-sudo crontab -e
-
-# 添加以下行（每月 1 号凌晨 3 点检查续期）
-0 3 1 * * /opt/deadornot/backend/deploy/certbot/renew-cert.sh >> /var/log/certbot-renew.log 2>&1
+# 查看 crontab
+sudo crontab -l
 ```
 
-### 5. 重启 Nginx
+### 4. 重启 Nginx
 
 配置完成后重启 Nginx：
 
@@ -397,14 +302,11 @@ sudo systemctl restart nginx
 sudo systemctl status nginx
 ```
 
-### 6. 验证 SSL 配置
+### 5. 验证 SSL 配置
 
 ```bash
 # 测试 HTTPS 连接
-curl -I https://your-domain.com/api/health
-
-# 使用浏览器访问
-# https://your-domain.com/api/health
+curl -I https://alive.xiaodao.fun/health
 ```
 
 ## 服务管理
@@ -655,21 +557,21 @@ sudo getenforce
 
 ### 8. SSL 证书获取失败
 
-**问题**: Let's Encrypt 证书获取失败
+**问题**: SSL 证书获取失败
 
 **解决方案**:
 - 确保域名已正确解析到服务器 IP
-- 检查防火墙是否开放 80 端口（Let's Encrypt 需要验证）
-- 确保 Nginx 配置正确，可以访问 `http://your-domain.com/.well-known/acme-challenge/`
-- 检查 certbot 日志: `sudo tail -f /var/log/letsencrypt/letsencrypt.log`
-- 如果使用测试模式: `TEST_MODE=true sudo /opt/deadornot/backend/deploy/certbot/setup-ssl.sh your-domain.com`
+- 检查防火墙是否开放 80 端口（用于 HTTP-01 验证）
+- 确保 Nginx 已启动且配置基本正确
+- 检查 acme.sh 日志: `~/.acme.sh/acme.sh.log`
+- 尝试使用调试模式: `sudo /opt/deadornot/backend/deploy/acme/setup-ssl.sh your-domain.com --debug`
 
 ### 9. HTTPS 访问失败
 
 **问题**: 无法通过 HTTPS 访问
 
 **解决方案**:
-- 检查 SSL 证书是否存在: `sudo ls -la /etc/letsencrypt/live/alive.xiaodao.fun/`
+- 检查 SSL 证书是否存在: `sudo ls -la /etc/nginx/ssl/alive.xiaodao.fun/`
 - 检查 Nginx 配置中的证书路径是否正确
 - 检查防火墙是否开放 443 端口
 - 查看 Nginx 错误日志: `sudo tail -f /var/log/nginx/deadornot-error.log`
@@ -680,19 +582,18 @@ sudo getenforce
 **问题**: 通配符证书（*.xiaodao.fun）申请失败
 
 **解决方案**:
-- 确保使用 DNS-01 验证方式（不是 HTTP-01）
+- 确保使用 DNS-01 验证方式
 - 检查 DNS TXT 记录是否正确添加：
   ```bash
   # 检查 DNS 记录
   dig _acme-challenge.xiaodao.fun TXT
   ```
 - 确保 DNS 记录已生效（可能需要几分钟到几小时）
-- 检查域名解析是否正确
-- 如果使用测试模式，设置 `TEST_MODE=true` 环境变量
-- 查看 certbot 日志: `sudo tail -f /var/log/letsencrypt/letsencrypt.log`
+- 建议使用 DNS API 模式以避免手动操作：参考 [acme.sh DNS API](https://github.com/acmesh-official/acme.sh/wiki/dnsapi)
+- 检查 acme.sh 日志
 
 **通配符证书使用说明**：
-- 通配符证书路径：`/etc/letsencrypt/live/xiaodao.fun/`（注意是根域名，不是子域名）
+- 通配符证书路径：`/etc/nginx/ssl/xiaodao.fun/`
 - 在 Nginx 配置中，所有使用 `*.xiaodao.fun` 的 server 块都可以使用同一个证书
 - 证书同时覆盖 `xiaodao.fun` 和 `*.xiaodao.fun`
 
