@@ -11,6 +11,8 @@ struct SetupView: View {
   // 是否是独立页面（首次进入），还是通过导航栏进入的 sheet
   var isStandalone: Bool = false
 
+  @Environment(\.colorScheme) var colorScheme
+
   private var primaryGreen: Color {
     Color(red: 0.2, green: 0.7, blue: 0.3)
   }
@@ -106,6 +108,36 @@ struct SetupView: View {
         Text("紧急联系人邮箱")
       } footer: {
         Text("已添加 \(workingEmails.filter { !$0.isEmpty }.count)/3 个联系人")
+      }
+
+      // 推送通知设置
+      Section {
+        Toggle(isOn: $userInfo.pushEnabled) {
+          VStack(alignment: .leading, spacing: 4) {
+            Text("接收打卡提醒")
+              .font(.body)
+            Text("每天早上9点提醒你打卡")
+              .font(.caption)
+              .foregroundColor(.secondary)
+          }
+        }
+        .tint(primaryGreen)
+
+        if userInfo.pushEnabled {
+          HStack {
+            Image(systemName: "applelogo")
+              .font(.caption)
+            Text("APNS Token 已注册")
+              .font(.caption)
+              .foregroundColor(.secondary)
+          }
+        }
+      } header: {
+        Text("推送通知")
+      } footer: {
+        if !userInfo.pushEnabled {
+          Text("关闭后将不会收到打卡提醒推送")
+        }
       }
 
       // 完成按钮（仅在独立页面时显示在底部）
@@ -218,6 +250,12 @@ struct SetupView: View {
       !email.isEmpty && isValidEmail(email)
     }
     userInfo.emergencyContactEmails = validEmails
+
+    // 获取 APNS Token
+    let apnsToken = UserDefaults.standard.string(forKey: "DeadOrNot.apnsToken") ?? ""
+    if !apnsToken.isEmpty {
+      userInfo.apnsToken = apnsToken
+    }
 
     // 提交到服务器
     Task {

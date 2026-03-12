@@ -10,7 +10,7 @@ final class UserInfo: ObservableObject {
             }
         }
     }
-    
+
     @Published var emergencyContactEmails: [String] = [] {
         didSet {
             // 限制最多3个联系人
@@ -22,10 +22,28 @@ final class UserInfo: ObservableObject {
             }
         }
     }
-    
+
+    @Published var apnsToken: String = "" {
+        didSet {
+            if !isLoading {
+                saveToStorage()
+            }
+        }
+    }
+
+    @Published var pushEnabled: Bool = true {
+        didSet {
+            if !isLoading {
+                saveToStorage()
+            }
+        }
+    }
+
     private var isLoading = false
     private let userDefaultsKeyName = "DeadOrNot.userName"
     private let userDefaultsKeyEmails = "DeadOrNot.emergencyContactEmails"
+    private let userDefaultsKeyAPNSToken = "DeadOrNot.apnsToken"
+    private let userDefaultsKeyPushEnabled = "DeadOrNot.pushEnabled"
     private let apiService = APIService.shared
     
     init() {
@@ -38,27 +56,33 @@ final class UserInfo: ObservableObject {
     private func loadFromStorage() {
         isLoading = true
         defer { isLoading = false }
-        
+
         name = UserDefaults.standard.string(forKey: userDefaultsKeyName) ?? ""
         if let emails = UserDefaults.standard.array(forKey: userDefaultsKeyEmails) as? [String] {
             emergencyContactEmails = emails
         }
+        apnsToken = UserDefaults.standard.string(forKey: userDefaultsKeyAPNSToken) ?? ""
+        pushEnabled = UserDefaults.standard.object(forKey: userDefaultsKeyPushEnabled) as? Bool ?? true
     }
-    
+
     private func saveToStorage() {
         UserDefaults.standard.set(name, forKey: userDefaultsKeyName)
         UserDefaults.standard.set(emergencyContactEmails, forKey: userDefaultsKeyEmails)
+        UserDefaults.standard.set(apnsToken, forKey: userDefaultsKeyAPNSToken)
+        UserDefaults.standard.set(pushEnabled, forKey: userDefaultsKeyPushEnabled)
         // 确保立即同步到磁盘
         UserDefaults.standard.synchronize()
     }
-    
+
     func saveToServer() async {
         let timezone = TimeZone.current.identifier
         do {
             try await apiService.updateUser(
                 name: name.isEmpty ? nil : name,
                 emails: emergencyContactEmails.isEmpty ? nil : emergencyContactEmails,
-                timezone: timezone
+                timezone: timezone,
+                apnsToken: apnsToken.isEmpty ? nil : apnsToken,
+                pushEnabled: pushEnabled
             )
         } catch {
             print("Failed to save user info to server: \(error.localizedDescription)")
@@ -69,7 +93,7 @@ final class UserInfo: ObservableObject {
         do {
             let user = try await apiService.getUser()
             isLoading = true
-            
+
             // 如果服务器有数据，优先使用服务器数据
             if !user.name.isEmpty {
                 name = user.name
@@ -77,7 +101,11 @@ final class UserInfo: ObservableObject {
             if !user.emergencyContactEmails.isEmpty {
                 emergencyContactEmails = user.emergencyContactEmails
             }
-            
+            if let token = user.apnsToken, !token.isEmpty {
+                apnsToken = token
+            }
+            pushEnabled = user.pushEnabled
+
             saveToStorage()
             isLoading = false
         } catch {

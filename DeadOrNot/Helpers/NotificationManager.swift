@@ -1,11 +1,15 @@
 import Foundation
 import UserNotifications
+import UIKit
 
-final class NotificationManager {
+final class NotificationManager: NSObject {
     static let shared = NotificationManager()
     private let center = UNUserNotificationCenter.current()
+    private(set) var deviceToken: String = ""
 
-    private init() {}
+    private override init() {
+        super.init()
+    }
 
     func requestAuthorization() {
         center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
@@ -13,8 +17,35 @@ final class NotificationManager {
                 print("通知权限请求出错：", err)
             } else {
                 print("通知权限：", granted)
+                if granted {
+                    self.registerForRemoteNotifications()
+                }
             }
         }
+    }
+
+    private func registerForRemoteNotifications() {
+        DispatchQueue.main.async {
+            UIApplication.shared.registerForRemoteNotifications()
+        }
+    }
+
+    // 注册 APNs 设备令牌成功后的回调
+    func didRegisterForRemoteNotificationsWithDeviceToken(_ token: Data) {
+        let tokenParts = token.map { data in String(format: "%02.2hhx", data) }
+        let tokenString = tokenParts.joined()
+        self.deviceToken = tokenString
+        print("APNs Token: \(tokenString)")
+
+        // 保存到 UserDefaults
+        UserDefaults.standard.set(tokenString, forKey: "DeadOrNot.apnsToken")
+
+        // 通知 UserInfo 更新
+        NotificationCenter.default.post(name: .apnsTokenUpdated, object: nil, userInfo: ["token": tokenString])
+    }
+
+    func didFailToRegisterForRemoteNotificationsWithError(_ error: Error) {
+        print("APNs 注册失败: \(error.localizedDescription)")
     }
 
     func scheduleCalendarNotification(identifier: String, title: String, body: String, dateComponents: DateComponents, repeats: Bool = false) {
@@ -50,4 +81,9 @@ final class NotificationManager {
         center.removePendingNotificationRequests(withIdentifiers: [identifier])
         print("取消通知：", identifier)
     }
+}
+
+// 扩展 Notification.Name
+extension Notification.Name {
+    static let apnsTokenUpdated = Notification.Name("apnsTokenUpdated")
 }

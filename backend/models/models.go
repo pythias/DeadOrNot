@@ -111,3 +111,34 @@ func (nc *NotificationContent) Scan(value interface{}) error {
 
 	return json.Unmarshal(bytes, nc)
 }
+
+// Token 模型
+type Token struct {
+	ID           int64     `json:"id" db:"id"`
+	UserID       int64     `json:"user_id" db:"user_id"`
+	DeviceID     string    `json:"device_id" db:"device_id"`
+	AccessToken  string    `json:"access_token" db:"access_token"`
+	RefreshToken string    `json:"refresh_token" db:"refresh_token"`
+	TokenType    string    `json:"token_type" db:"token_type"`
+	ExpiresAt    time.Time `json:"expires_at" db:"expires_at"`
+	CreatedAt    time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
+}
+
+// TokenResponse 登录响应
+type TokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int64  `json:"expires_in"`
+}
+
+// LoginRequest 登录请求
+type LoginRequest struct {
+	DeviceID string `json:"device_id"`
+}
+
+// RefreshRequest 刷新Token请求
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}

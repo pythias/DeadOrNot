@@ -38,6 +38,7 @@ func main() {
 	emailService := services.NewEmailService(cfg)
 	notificationService := services.NewNotificationService(db, emailService, pushService)
 	schedulerService := services.NewSchedulerService(db, notificationService, cfg)
+	authService := services.NewAuthService(db, cfg)
 
 	// Start scheduler
 	go schedulerService.Start()
@@ -46,7 +47,7 @@ func main() {
 	router := gin.Default()
 
 	// Setup routes
-	routes.SetupRoutes(router, db, notificationService)
+	routes.SetupRoutes(router, db, notificationService, authService)
 
 	// Start server
 	port := os.Getenv("PORT")

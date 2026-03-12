@@ -19,6 +19,7 @@ type SchedulerService struct {
 	notificationService *NotificationService
 	config              *config.Config
 	cron                *cron.Cron
+	emailTemplate       *EmailTemplate
 }
 
 // NewSchedulerService 创建定时任务服务
@@ -28,6 +29,7 @@ func NewSchedulerService(db *sql.DB, notificationService *NotificationService, c
 		notificationService: notificationService,
 		config:              cfg,
 		cron:                cron.New(cron.WithSeconds()),
+		emailTemplate:       NewEmailTemplate(),
 	}
 }
 
@@ -222,6 +224,15 @@ func (ss *SchedulerService) checkThreeDaysMissedCheckIns() {
 			daysSince = 0
 		}
 
+		// 获取累计打卡天数
+		var totalCheckins int
+		err = ss.db.QueryRow(`
+			SELECT COUNT(*) FROM checkins WHERE user_id = ?
+		`, userID).Scan(&totalCheckins)
+		if err != nil {
+			totalCheckins = 0
+		}
+
 		// 如果超过3天未打卡，但小于7天，则发送邮件提醒
 		if daysSince >= 3 && daysSince < 7 {
 			// 获取用户时区的今天日期字符串
@@ -243,16 +254,20 @@ func (ss *SchedulerService) checkThreeDaysMissedCheckIns() {
 						continue
 					}
 
-					subject := "紧急提醒：" + name + " 已连续多日未打卡"
-					body := fmt.Sprintf(`
-您好，
+					// 使用新的邮件模板
+					var lastCheckinTime *time.Time
+					if lastCheckIn.Valid {
+						lastCheckinTime = &lastCheckIn.Time
+					}
 
-%s 已连续 %d 天未在"死了么"应用中打卡。
+					templateData := EmergencyReminderData{
+						Name:          name,
+						DaysSince:     daysSince,
+						LastCheckinAt: lastCheckinTime,
+						TotalCheckins: totalCheckins,
+					}
 
-请及时联系确认其安全状况。
-
-此邮件由系统自动发送。
-					`, name, daysSince)
+					subject, body := ss.emailTemplate.BuildEmergencyReminderEmail(templateData)
 
 					content := models.NotificationContent{
 						Subject: subject,

@@ -4,6 +4,8 @@ import Combine
 @MainActor
 final class CheckInStore: ObservableObject {
     @Published private(set) var dates: Set<String> = [] // yyyy-MM-dd
+    @Published private(set) var historyDatetimes: [String] = [] // RFC 3339 格式的完整时间
+    @Published private(set) var stats: CheckInStats?
     private let userDefaultsKey = "DeadOrNot.checkinDates"
     private let calendar = Calendar.current
     private var cancellables = Set<AnyCancellable>()
@@ -19,7 +21,7 @@ final class CheckInStore: ObservableObject {
             dates = Set(arr)
         }
         isLoading = false
-        
+
         // 设置监听，监听后续的变化
         $dates
             .dropFirst() // 跳过初始值
@@ -33,33 +35,37 @@ final class CheckInStore: ObservableObject {
     func reloadFromStorage() {
         isLoading = true
         defer { isLoading = false }
-        
+
         // 先加载本地缓存
         if let arr = UserDefaults.standard.array(forKey: userDefaultsKey) as? [String] {
             dates = Set(arr)
         }
-        
+
         // 然后同步服务器数据
         Task {
             await syncFromServer()
+            await fetchStats()
         }
     }
-    
+
     private func syncFromServer() async {
         do {
             let serverDatetimes = try await apiService.getCheckInHistory()
             isLoading = true
-            
+
+            // 保存完整的打卡时间列表
+            historyDatetimes = serverDatetimes
+
             // 将 RFC 3339 格式的时间转换为日期字符串（yyyy-MM-dd）
             // 尝试两种格式：带小数秒和不带小数秒
             let formatterWithFraction = ISO8601DateFormatter()
             formatterWithFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            
+
             let formatterWithoutFraction = ISO8601DateFormatter()
             formatterWithoutFraction.formatOptions = [.withInternetDateTime]
-            
+
             let dateFormatter = self.dateFormatter()
-            
+
             let serverDates = serverDatetimes.compactMap { datetimeStr -> String? in
                 var date: Date?
                 // 先尝试带小数秒的格式
@@ -71,13 +77,22 @@ final class CheckInStore: ObservableObject {
                 guard let date = date else { return nil }
                 return dateFormatter.string(from: date)
             }
-            
+
             dates = Set(serverDates)
             saveToStorage()
             isLoading = false
         } catch {
             // 网络错误时保持使用本地数据
             print("Failed to sync from server: \(error.localizedDescription)")
+        }
+    }
+
+    func fetchStats() async {
+        do {
+            let serverStats = try await apiService.getCheckInStats()
+            stats = serverStats
+        } catch {
+            print("Failed to fetch stats: \(error.localizedDescription)")
         }
     }
 
@@ -109,23 +124,25 @@ final class CheckInStore: ObservableObject {
 
     func checkInToday() {
         let key = todayString
-        
+
         // 先更新本地状态（乐观更新）
         dates.insert(key)
         saveToStorage()
-        
+
         // 然后同步到服务器（发送完整时间，RFC 3339 格式）
         Task {
             do {
                 _ = try await apiService.checkIn(datetime: nil) // nil 表示使用当前时间
                 // 服务器同步成功，本地数据已是最新
+                await syncFromServer()
+                await fetchStats()
             } catch {
                 // 如果服务器同步失败，保持本地数据
                 // 下次reloadFromStorage时会尝试重新同步
                 print("Failed to sync check-in to server: \(error.localizedDescription)")
             }
         }
-        
+
         // 每次打卡后取消旧提醒并重新安排
         cancelMissedReminder()
         scheduleMissedReminderIfNeeded()
@@ -159,7 +176,7 @@ final class CheckInStore: ObservableObject {
 
     func scheduleMissedReminderIfNeeded(remindHour: Int = 9, minute: Int = 0) {
         guard let last = lastCheckinDate() else {
-            // 从未打卡：从今天开始计时���可按需求改为不安排直到第一次打卡）
+            // 从未打卡：从今天开始计时（可按需求改为不安排直到第一次打卡）
             let base = startOfDay(Date())
             scheduleReminder(baseDate: base, afterDays: 3, hour: remindHour, minute: minute)
             return
@@ -180,13 +197,13 @@ final class CheckInStore: ObservableObject {
             notificationManager.scheduleImmediateNotification(
                 identifier: missedNotificationIdentifier,
                 title: "连续未打卡提醒",
-                body: "你已连续 3 天未打卡，快打开“死了么”打个卡吧！"
+                body: "你已连续 3 天未打卡，快打开"死了么"打个卡吧！"
             )
         } else {
             notificationManager.scheduleCalendarNotification(
                 identifier: missedNotificationIdentifier,
                 title: "连续未打卡提醒",
-                body: "你已连续 3 天未打卡，快打开“死了么”打个卡吧！",
+                body: "你已连续 3 天未打卡，快打开"死了么"打个卡吧！",
                 dateComponents: comps
             )
         }

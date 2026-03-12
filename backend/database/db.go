@@ -38,6 +38,7 @@ func RunMigrations(db *sql.DB) error {
 		createUsersTable,
 		createCheckInsTable,
 		createNotificationsTable,
+		createTokensTable,
 	}
 
 	for i, migration := range migrations {
@@ -101,5 +102,23 @@ CREATE TABLE IF NOT EXISTS notifications (
     INDEX idx_user_status (user_id, status),
     INDEX idx_scheduled_status (scheduled_at, status),
     INDEX idx_unique_key (unique_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+`
+
+const createTokensTable = `
+CREATE TABLE IF NOT EXISTS tokens (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    device_id VARCHAR(255) NOT NULL,
+    access_token VARCHAR(255) UNIQUE NOT NULL,
+    refresh_token VARCHAR(255) UNIQUE NOT NULL,
+    token_type VARCHAR(20) DEFAULT 'Bearer',
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_access_token (access_token),
+    INDEX idx_refresh_token (refresh_token),
+    INDEX idx_user_device (user_id, device_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 `
